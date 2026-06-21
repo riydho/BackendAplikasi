@@ -187,6 +187,28 @@ router.post('/sensor-hcsr', async (req, res) => {
   }
 });
 
+// GET /api/device/sensor-rpm?alat_id=  ← dipanggil oleh Dashboard
+router.get('/sensor-rpm', verifyToken, async (req, res) => {
+  const { alat_id } = req.query;
+  try {
+    let rows;
+    if (alat_id) {
+      [rows] = await db.query(
+        'SELECT * FROM sensor_rpm WHERE alat_id = ? ORDER BY id DESC LIMIT 1',
+        [alat_id]
+      );
+    } else {
+      [rows] = await db.query('SELECT * FROM sensor_rpm ORDER BY id DESC LIMIT 1');
+    }
+    if (rows.length === 0) {
+      return res.json({ success: false, message: 'Belum ada data RPM' });
+    }
+    return res.json({ success: true, data: rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET /api/device/sensor-hcsr  ← dipanggil oleh frontend
 router.get('/sensor-hcsr', verifyToken, async (req, res) => {
   try {

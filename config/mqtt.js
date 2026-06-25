@@ -25,6 +25,11 @@ const realtimeState = {
     status:    'OFFLINE',
     updatedAt: null,
   },
+  sensor: {
+    jarak_cm:  0,
+    status:    'normal',
+    updatedAt: null,
+  },
 };
 
 const client = mqtt.connect({
@@ -45,6 +50,7 @@ client.on('connect', () => {
     'edasmart/giling',
     'edasmart/estop',
     'edasmart/device',
+    'edasmart/sensor',
   ];
   topics.forEach(t => client.subscribe(t, { qos: 1 }));
   console.log('📡 Subscribe ke semua topic ESP32');
@@ -205,6 +211,32 @@ client.on('message', async (topic, message) => {
           ['device', val.status]
         );
         console.log(`📟 Device: ${val.status}`);
+        break;
+      }
+
+      // ── Sensor HC-SR04 ──────────────────────────────────────
+      // Payload: {"jarak":15.3,"status":"normal"}
+      case 'edasmart/sensor': {
+        const jarak = parseFloat(val.jarak);
+        // 999 adalah sentinel value ESP32 saat sensor timeout — abaikan
+        if (isNaN(jarak) || jarak >= 999) break;
+
+        // Tentukan status jika tidak dikirim ESP32
+        let statusSensor = val.status ?? 'normal';
+
+        realtimeState.sensor.jarak_cm  = jarak;
+        realtimeState.sensor.status    = statusSensor;
+        realtimeState.sensor.updatedAt = new Date();
+
+        // Simpan ke DB (rate-limited: hanya kalau jarak berubah > 1 cm, dan bukan nilai error)
+        const lastJarak = realtimeState.sensor._lastSavedJarak ?? -99;
+        if (Math.abs(jarak - lastJarak) >= 1 && jarak < 999) {
+          realtimeState.sensor._lastSavedJarak = jarak;
+          await db.query(
+            'INSERT INTO sensor_hcsr (jarak_cm, status, waktu) VALUES (?, ?, NOW())',
+            [jarak, statusSensor]
+          );
+        }
         break;
       }
     }

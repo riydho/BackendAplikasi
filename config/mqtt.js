@@ -254,11 +254,16 @@ client.on('offline', () => {
 });
 
 // ── Helper publish command ke ESP32 ────────────────────────────────────────
-function publishCommand(mesin, perintah) {
+function publishCommand(mesin, perintah, durasiMenit = null) {
   // mesin: 'press' | 'giling'
-  // perintah: 'STOP'
-  // Payload JSON: {"mesin":"press","perintah":"STOP"}
-  const payload = JSON.stringify({ mesin, perintah });
+  // perintah: 'STOP' | 'START'
+  // durasiMenit: opsional, hanya untuk START
+  // Payload JSON: {"mesin":"press","perintah":"STOP"} atau {"mesin":"giling","perintah":"START","durasi":5}
+  const data = { mesin, perintah };
+  if (perintah === 'START' && durasiMenit !== null && !isNaN(durasiMenit)) {
+    data.durasi = durasiMenit;
+  }
+  const payload = JSON.stringify(data);
   client.publish('edasmart/cmd', payload, { qos: 1 }, (err) => {
     if (err) console.error(`[MQTT] Gagal publish edasmart/cmd:`, err.message);
     else     console.log(`✅ CMD → edasmart/cmd: ${payload}`);

@@ -110,7 +110,8 @@ router.post('/kontrol', verifyToken, async (req, res) => {
     if (perintah === 'nonaktif') {
       publishCommand(mesin, 'STOP');
     } else if (perintah === 'aktif') {
-      publishCommand(mesin, 'START');
+      const durasiMenit = req.body.durasi_menit ? parseInt(req.body.durasi_menit) : null;
+      publishCommand(mesin, 'START', durasiMenit);
     }
 
     return res.json({ success: true, message: `Perintah ${perintah} berhasil dikirim` });

@@ -16,6 +16,7 @@ router.get('/realtime', (req, res) => {
       giling: realtimeState.giling,
       estop:  realtimeState.estop,
       device: realtimeState.device,
+      sensor: realtimeState.sensor,
     },
     timestamp: new Date(),
   });

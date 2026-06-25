@@ -90,8 +90,8 @@ router.post('/cmd', verifyToken, async (req, res) => {
   if (!['press', 'giling'].includes(mesin)) {
     return res.status(400).json({ success: false, message: 'mesin harus "press" atau "giling"' });
   }
-  if (!['STOP'].includes(perintah)) {
-    return res.status(400).json({ success: false, message: 'perintah tidak dikenali (gunakan: STOP)' });
+  if (!['STOP', 'START'].includes(perintah)) {
+    return res.status(400).json({ success: false, message: 'perintah tidak dikenali (gunakan: STOP atau START)' });
   }
 
   try {

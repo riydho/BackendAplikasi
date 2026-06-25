@@ -102,12 +102,16 @@ router.post('/kontrol', verifyToken, async (req, res) => {
     }
 
     // 5. Publish ke MQTT via topic baru edasmart/cmd
-    const mesin = alat_id === 1 ? 'giling' : 'press';
+    // Cari nama mesin dari DB agar tidak hardcode alat_id
+    const [[alatRow]] = await db.query('SELECT nama_alat FROM alat WHERE id = ? LIMIT 1', [alat_id]);
+    const namaAlat = alatRow?.nama_alat?.toLowerCase() ?? '';
+    const mesin    = namaAlat.includes('pres') ? 'press' : 'giling';
+
     if (perintah === 'nonaktif') {
       publishCommand(mesin, 'STOP');
+    } else if (perintah === 'aktif') {
+      publishCommand(mesin, 'START');
     }
-    // Untuk aktif, ESP32 dikendalikan dari perangkat fisik.
-    // Backend hanya update DB & catat riwayat, tidak publish ke ESP32.
 
     return res.json({ success: true, message: `Perintah ${perintah} berhasil dikirim` });
   } catch (err) {

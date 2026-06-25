@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const verifyToken = require('../middleware/auth');
 const db = require('../config/db');
-const mqttClient = require('../config/mqtt');
+const { client: mqttClient, publishCommand } = require('../config/mqtt');
 require('dotenv').config();
 
 // GET /api/device/alat
@@ -102,12 +102,19 @@ router.post('/kontrol', verifyToken, async (req, res) => {
     }
 
     // 5. Publish ke MQTT HiveMQ
-    const topic   = `edasmart/alat/${alat_id}`;
-    const payload = perintah === 'aktif' ? '1' : '0';
-    mqttClient.publish(topic, payload, { qos: 1 }, (err) => {
-      if (err) console.log('MQTT publish error:', err.message);
-      else console.log(`✅ MQTT → ${topic}: ${payload}`);
-    });
+    const topic   = alat_id === 1 ? 'edasmart/cmd/giling' : 'edasmart/cmd/press';
+    const mesin   = alat_id === 1 ? 'giling' : 'press';
+    if (perintah === 'nonaktif') {
+      // Kirim STOP ke ESP32
+      publishCommand(mesin, 'STOP');
+    } else {
+      // Untuk aktifkan, pakai topic lama (legacy)
+      const payload = '1';
+      mqttClient.publish(`edasmart/alat/${alat_id}`, payload, { qos: 1 }, (err) => {
+        if (err) console.log('MQTT publish error:', err.message);
+        else console.log(`✅ MQTT → edasmart/alat/${alat_id}: ${payload}`);
+      });
+    }
 
     return res.json({ success: true, message: `Perintah ${perintah} berhasil dikirim` });
   } catch (err) {

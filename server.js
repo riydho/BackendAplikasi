@@ -3,15 +3,17 @@ const cors = require('cors');
 require('dotenv').config();
 
 require('./config/db');
+require('./config/mqtt'); // inisialisasi MQTT client & mulai subscribe
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Hanya route yang sudah ada
+// Routes
 app.use('/api/auth',   require('./routes/auth'));
 app.use('/api/device', require('./routes/device'));
+app.use('/api/sensor', require('./routes/sensor'));
 
 app.get('/', (req, res) => {
   res.json({ success: true, message: '🌿 EdaSmart Backend berjalan!' });

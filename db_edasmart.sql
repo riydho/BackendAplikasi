@@ -109,3 +109,22 @@ CREATE TABLE IF NOT EXISTS log_device (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+-- ============================================================
+-- 9. PRESS_LOG (log fase mesin press dari MQTT)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS press_log (
+  id     INT AUTO_INCREMENT PRIMARY KEY,
+  fase   ENUM('TURUN','TAHAN','NAIK','MUNDUR','IDLE') NOT NULL,
+  waktu  DATETIME DEFAULT NOW()
+);
+
+-- ============================================================
+-- 10. DEVICE_STATUS (log online/offline & estop ESP32)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS device_status (
+  id     INT AUTO_INCREMENT PRIMARY KEY,
+  tipe   ENUM('device','estop') NOT NULL,
+  nilai  VARCHAR(50) NOT NULL,
+  waktu  DATETIME DEFAULT NOW()
+);

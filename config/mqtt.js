@@ -39,34 +39,41 @@ const client = mqtt.connect({
 client.on('connect', () => {
   console.log('✅ MQTT terhubung ke HiveMQ');
 
-  // Subscribe semua topic dari Arduino
+  // Subscribe 4 topic dari ESP32
   const topics = [
-    'edasmart/giling/rpm',
-    'edasmart/giling/sisa',
-    'edasmart/giling/status',
-    'edasmart/press/status',
-    'edasmart/press/phase',
-    'edasmart/press/sisa',
+    'edasmart/press',
+    'edasmart/giling',
     'edasmart/estop',
     'edasmart/device',
   ];
   topics.forEach(t => client.subscribe(t, { qos: 1 }));
-  console.log('📡 Subscribe ke semua topic Arduino');
+  console.log('📡 Subscribe ke semua topic ESP32');
 });
 
 client.on('message', async (topic, message) => {
-  const val = message.toString().trim();
-  console.log(`[MQTT IN] ${topic}: ${val}`);
+  const raw = message.toString().trim();
+  console.log(`[MQTT IN] ${topic}: ${raw}`);
+
+  let val;
+  try {
+    val = JSON.parse(raw);
+  } catch {
+    console.warn(`[MQTT] Payload bukan JSON valid di topic ${topic}: ${raw}`);
+    return;
+  }
 
   try {
     switch (topic) {
 
-      // ── Press Status ────────────────────────────────────────
-      case 'edasmart/press/status': {
-        realtimeState.press.status    = val;
+      // ── Press ───────────────────────────────────────────────
+      // Payload: {"status":"ON","phase":"TAHAN","sisa":45}
+      case 'edasmart/press': {
+        realtimeState.press.status    = val.status ?? realtimeState.press.status;
+        realtimeState.press.phase     = val.phase  ?? realtimeState.press.phase;
+        realtimeState.press.sisa      = val.sisa   ?? realtimeState.press.sisa;
         realtimeState.press.updatedAt = new Date();
-        const dbStatus = val === 'ON' ? 'aktif' : 'nonaktif';
-        // Nama alat di DB: 'Mesin Pengepres'
+
+        const dbStatus = val.status === 'ON' ? 'aktif' : 'nonaktif';
         await db.query(
           "UPDATE alat SET status = ? WHERE nama_alat LIKE '%pengepres%' OR nama_alat LIKE '%press%' LIMIT 1",
           [dbStatus]
@@ -75,12 +82,11 @@ client.on('message', async (topic, message) => {
           "SELECT id FROM alat WHERE nama_alat LIKE '%pengepres%' OR nama_alat LIKE '%press%' LIMIT 1"
         );
         if (alatPress) {
-          if (val === 'ON') {
+          if (val.status === 'ON') {
             await db.query(
               "INSERT INTO monitoring (alat_id, status, waktu_aktif, sumber) VALUES (?, 'aktif', NOW(), 'mqtt')",
               [alatPress.id]
             );
-            // created_by pakai NULL — hapus foreign key constraint kalau ada masalah
             await db.query(
               "INSERT INTO jadwal (alat_id, waktu_mulai, status) VALUES (?, NOW(), 'berjalan')",
               [alatPress.id]
@@ -98,36 +104,26 @@ client.on('message', async (topic, message) => {
             );
           }
         }
-        break;
-      }
 
-      // ── Press Phase ─────────────────────────────────────────
-      case 'edasmart/press/phase': {
-        realtimeState.press.phase     = val;          // 'TURUN'|'TAHAN'|'NAIK'|'MUNDUR'|'IDLE'
-        realtimeState.press.updatedAt = new Date();
-        // Simpan ke press_log
-        await db.query(
-          'INSERT INTO press_log (fase, waktu) VALUES (?, NOW())',
-          [val]
-        );
-        break;
-      }
-
-      // ── Press Sisa Waktu ────────────────────────────────────
-      case 'edasmart/press/sisa': {
-        const sisa = parseInt(val);
-        if (!isNaN(sisa)) {
-          realtimeState.press.sisa      = sisa;
-          realtimeState.press.updatedAt = new Date();
+        // Simpan phase ke press_log jika ada
+        if (val.phase) {
+          await db.query(
+            'INSERT INTO press_log (fase, waktu) VALUES (?, NOW())',
+            [val.phase]
+          );
         }
         break;
       }
 
-      // ── Giling Status ───────────────────────────────────────
-      case 'edasmart/giling/status': {
-        realtimeState.giling.status    = val;
+      // ── Giling ──────────────────────────────────────────────
+      // Payload: {"status":"ON","rpm":1200,"sisa":30}
+      case 'edasmart/giling': {
+        realtimeState.giling.status    = val.status ?? realtimeState.giling.status;
+        realtimeState.giling.rpm       = val.rpm    ?? realtimeState.giling.rpm;
+        realtimeState.giling.sisa      = val.sisa   ?? realtimeState.giling.sisa;
         realtimeState.giling.updatedAt = new Date();
-        const dbStatusGiling = val === 'ON' ? 'aktif' : 'nonaktif';
+
+        const dbStatusGiling = val.status === 'ON' ? 'aktif' : 'nonaktif';
         await db.query(
           "UPDATE alat SET status = ? WHERE nama_alat LIKE '%penggiling%' LIMIT 1",
           [dbStatusGiling]
@@ -136,7 +132,7 @@ client.on('message', async (topic, message) => {
           "SELECT id FROM alat WHERE nama_alat LIKE '%penggiling%' LIMIT 1"
         );
         if (alatGiling) {
-          if (val === 'ON') {
+          if (val.status === 'ON') {
             await db.query(
               "INSERT INTO monitoring (alat_id, status, waktu_aktif, sumber) VALUES (?, 'aktif', NOW(), 'mqtt')",
               [alatGiling.id]
@@ -158,17 +154,11 @@ client.on('message', async (topic, message) => {
             );
           }
         }
-        break;
-      }
 
-      // ── Giling RPM ──────────────────────────────────────────
-      case 'edasmart/giling/rpm': {
-        const rpm = parseInt(val);
-        if (!isNaN(rpm)) {
-          realtimeState.giling.rpm      = rpm;
-          realtimeState.giling.updatedAt = new Date();
-          // Simpan ke sensor_rpm (rate-limited: hanya kalau berbeda ≥5 dari sebelumnya)
-          if (Math.abs(rpm - (realtimeState.giling._lastSavedRpm || 0)) >= 5) {
+        // Simpan RPM ke sensor_rpm (rate-limited: hanya kalau berbeda ≥5)
+        if (val.rpm !== undefined) {
+          const rpm = parseInt(val.rpm);
+          if (!isNaN(rpm) && Math.abs(rpm - (realtimeState.giling._lastSavedRpm || 0)) >= 5) {
             realtimeState.giling._lastSavedRpm = rpm;
             await db.query(
               'INSERT INTO sensor_rpm (rpm, waktu) VALUES (?, NOW())',
@@ -179,43 +169,33 @@ client.on('message', async (topic, message) => {
         break;
       }
 
-      // ── Giling Sisa Waktu ───────────────────────────────────
-      case 'edasmart/giling/sisa': {
-        const sisa = parseInt(val);
-        if (!isNaN(sisa)) {
-          realtimeState.giling.sisa      = sisa;
-          realtimeState.giling.updatedAt = new Date();
-        }
-        break;
-      }
-
       // ── Emergency Stop ──────────────────────────────────────
+      // Payload: {"aktif":true} | {"aktif":false}
       case 'edasmart/estop': {
-        const aktif = val === 'TRIGGERED';
+        const aktif = val.aktif === true;
         realtimeState.estop.aktif     = aktif;
         realtimeState.estop.updatedAt = new Date();
-        // Update semua alat jadi nonaktif saat estop
         if (aktif) {
           await db.query("UPDATE alat SET status = 'nonaktif'");
         }
-        // Simpan ke device_status
         await db.query(
           'INSERT INTO device_status (tipe, nilai, waktu) VALUES (?, ?, NOW())',
-          ['estop', val]
+          ['estop', aktif ? 'TRIGGERED' : 'RELEASED']
         );
-        console.log(`🚨 E-Stop: ${val}`);
+        console.log(`🚨 E-Stop: ${aktif ? 'TRIGGERED' : 'RELEASED'}`);
         break;
       }
 
       // ── Device Online/Offline ───────────────────────────────
+      // Payload: {"status":"ONLINE"} | {"status":"OFFLINE"}
       case 'edasmart/device': {
-        realtimeState.device.status    = val;   // 'ONLINE' | 'OFFLINE'
+        realtimeState.device.status    = val.status ?? 'OFFLINE';
         realtimeState.device.updatedAt = new Date();
         await db.query(
           'INSERT INTO device_status (tipe, nilai, waktu) VALUES (?, ?, NOW())',
-          ['device', val]
+          ['device', val.status]
         );
-        console.log(`📟 Device: ${val}`);
+        console.log(`📟 Device: ${val.status}`);
         break;
       }
     }
@@ -235,11 +215,12 @@ client.on('offline', () => {
 // ── Helper publish command ke ESP32 ────────────────────────────────────────
 function publishCommand(mesin, perintah) {
   // mesin: 'press' | 'giling'
-  // perintah: 'STOP' (saat ini ESP32 hanya handle STOP)
-  const topic = `edasmart/cmd/${mesin}`;
-  client.publish(topic, perintah, { qos: 1 }, (err) => {
-    if (err) console.error(`[MQTT] Gagal publish ${topic}:`, err.message);
-    else     console.log(`✅ CMD → ${topic}: ${perintah}`);
+  // perintah: 'STOP'
+  // Payload JSON: {"mesin":"press","perintah":"STOP"}
+  const payload = JSON.stringify({ mesin, perintah });
+  client.publish('edasmart/cmd', payload, { qos: 1 }, (err) => {
+    if (err) console.error(`[MQTT] Gagal publish edasmart/cmd:`, err.message);
+    else     console.log(`✅ CMD → edasmart/cmd: ${payload}`);
   });
 }
 

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const verifyToken = require('../middleware/auth');
 const db = require('../config/db');
-const { client: mqttClient, publishCommand } = require('../config/mqtt');
+const { publishCommand } = require('../config/mqtt');
 require('dotenv').config();
 
 // GET /api/device/alat
@@ -23,7 +23,7 @@ router.get('/jadwal-hari-ini', verifyToken, async (req, res) => {
       FROM jadwal j
       LEFT JOIN alat a ON j.alat_id = a.id
       WHERE DATE(j.waktu_mulai) = CURDATE()
-      ORDER BY j.waktu_mulai ASC
+      ORDER BY j.waktu_mulai DESC
     `);
 
     const [monitoring] = await db.query(`
@@ -101,20 +101,13 @@ router.post('/kontrol', verifyToken, async (req, res) => {
       }
     }
 
-    // 5. Publish ke MQTT HiveMQ
-    const topic   = alat_id === 1 ? 'edasmart/cmd/giling' : 'edasmart/cmd/press';
-    const mesin   = alat_id === 1 ? 'giling' : 'press';
+    // 5. Publish ke MQTT via topic baru edasmart/cmd
+    const mesin = alat_id === 1 ? 'giling' : 'press';
     if (perintah === 'nonaktif') {
-      // Kirim STOP ke ESP32
       publishCommand(mesin, 'STOP');
-    } else {
-      // Untuk aktifkan, pakai topic lama (legacy)
-      const payload = '1';
-      mqttClient.publish(`edasmart/alat/${alat_id}`, payload, { qos: 1 }, (err) => {
-        if (err) console.log('MQTT publish error:', err.message);
-        else console.log(`✅ MQTT → edasmart/alat/${alat_id}: ${payload}`);
-      });
     }
+    // Untuk aktif, ESP32 dikendalikan dari perangkat fisik.
+    // Backend hanya update DB & catat riwayat, tidak publish ke ESP32.
 
     return res.json({ success: true, message: `Perintah ${perintah} berhasil dikirim` });
   } catch (err) {

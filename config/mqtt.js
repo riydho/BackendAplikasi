@@ -58,8 +58,17 @@ client.on('message', async (topic, message) => {
   try {
     val = JSON.parse(raw);
   } catch {
-    console.warn(`[MQTT] Payload bukan JSON valid di topic ${topic}: ${raw}`);
-    return;
+    // Fallback: handle payload string lama dari ESP32 (sebelum update firmware)
+    // estop lama: "TRIGGERED" / "RELEASED"
+    // device lama: "ONLINE" / "OFFLINE"
+    if (topic === 'edasmart/estop') {
+      val = { aktif: raw === 'TRIGGERED' };
+    } else if (topic === 'edasmart/device') {
+      val = { status: raw };
+    } else {
+      console.warn(`[MQTT] Payload bukan JSON valid di topic ${topic}: ${raw}`);
+      return;
+    }
   }
 
   try {

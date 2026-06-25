@@ -63,43 +63,38 @@ client.on('message', async (topic, message) => {
 
       // ── Press Status ────────────────────────────────────────
       case 'edasmart/press/status': {
-        realtimeState.press.status    = val;          // 'ON' | 'OFF'
+        realtimeState.press.status    = val;
         realtimeState.press.updatedAt = new Date();
         const dbStatus = val === 'ON' ? 'aktif' : 'nonaktif';
+        // Nama alat di DB: 'Mesin Pengepres'
         await db.query(
-          "UPDATE alat SET status = ? WHERE nama_alat LIKE '%press%' OR nama_alat LIKE '%pengepres%' LIMIT 1",
+          "UPDATE alat SET status = ? WHERE nama_alat LIKE '%pengepres%' OR nama_alat LIKE '%press%' LIMIT 1",
           [dbStatus]
         );
-        // Jika mesin mulai → buka sesi monitoring
-        if (val === 'ON') {
-          const [[alat]] = await db.query(
-            "SELECT id FROM alat WHERE nama_alat LIKE '%press%' OR nama_alat LIKE '%pengepres%' LIMIT 1"
-          );
-          if (alat) {
+        const [[alatPress]] = await db.query(
+          "SELECT id FROM alat WHERE nama_alat LIKE '%pengepres%' OR nama_alat LIKE '%press%' LIMIT 1"
+        );
+        if (alatPress) {
+          if (val === 'ON') {
             await db.query(
               "INSERT INTO monitoring (alat_id, status, waktu_aktif, sumber) VALUES (?, 'aktif', NOW(), 'mqtt')",
-              [alat.id]
+              [alatPress.id]
             );
+            // created_by pakai NULL — hapus foreign key constraint kalau ada masalah
             await db.query(
-              "INSERT INTO jadwal (alat_id, waktu_mulai, status, created_by) VALUES (?, NOW(), 'berjalan', NULL)",
-              [alat.id]
+              "INSERT INTO jadwal (alat_id, waktu_mulai, status) VALUES (?, NOW(), 'berjalan')",
+              [alatPress.id]
             );
-          }
-        } else {
-          // Tutup sesi monitoring
-          const [[alat]] = await db.query(
-            "SELECT id FROM alat WHERE nama_alat LIKE '%press%' OR nama_alat LIKE '%pengepres%' LIMIT 1"
-          );
-          if (alat) {
+          } else {
             await db.query(
               `UPDATE monitoring SET waktu_nonaktif = NOW(), status = 'nonaktif',
                durasi_menit = TIMESTAMPDIFF(MINUTE, waktu_aktif, NOW())
                WHERE alat_id = ? AND status = 'aktif' ORDER BY id DESC LIMIT 1`,
-              [alat.id]
+              [alatPress.id]
             );
             await db.query(
               "UPDATE jadwal SET waktu_selesai = NOW(), status = 'selesai' WHERE alat_id = ? AND status = 'berjalan' ORDER BY id DESC LIMIT 1",
-              [alat.id]
+              [alatPress.id]
             );
           }
         }
@@ -132,39 +127,34 @@ client.on('message', async (topic, message) => {
       case 'edasmart/giling/status': {
         realtimeState.giling.status    = val;
         realtimeState.giling.updatedAt = new Date();
-        const dbStatus = val === 'ON' ? 'aktif' : 'nonaktif';
+        const dbStatusGiling = val === 'ON' ? 'aktif' : 'nonaktif';
         await db.query(
           "UPDATE alat SET status = ? WHERE nama_alat LIKE '%penggiling%' LIMIT 1",
-          [dbStatus]
+          [dbStatusGiling]
         );
-        if (val === 'ON') {
-          const [[alat]] = await db.query(
-            "SELECT id FROM alat WHERE nama_alat LIKE '%penggiling%' LIMIT 1"
-          );
-          if (alat) {
+        const [[alatGiling]] = await db.query(
+          "SELECT id FROM alat WHERE nama_alat LIKE '%penggiling%' LIMIT 1"
+        );
+        if (alatGiling) {
+          if (val === 'ON') {
             await db.query(
               "INSERT INTO monitoring (alat_id, status, waktu_aktif, sumber) VALUES (?, 'aktif', NOW(), 'mqtt')",
-              [alat.id]
+              [alatGiling.id]
             );
             await db.query(
-              "INSERT INTO jadwal (alat_id, waktu_mulai, status, created_by) VALUES (?, NOW(), 'berjalan', NULL)",
-              [alat.id]
+              "INSERT INTO jadwal (alat_id, waktu_mulai, status) VALUES (?, NOW(), 'berjalan')",
+              [alatGiling.id]
             );
-          }
-        } else {
-          const [[alat]] = await db.query(
-            "SELECT id FROM alat WHERE nama_alat LIKE '%penggiling%' LIMIT 1"
-          );
-          if (alat) {
+          } else {
             await db.query(
               `UPDATE monitoring SET waktu_nonaktif = NOW(), status = 'nonaktif',
                durasi_menit = TIMESTAMPDIFF(MINUTE, waktu_aktif, NOW())
                WHERE alat_id = ? AND status = 'aktif' ORDER BY id DESC LIMIT 1`,
-              [alat.id]
+              [alatGiling.id]
             );
             await db.query(
               "UPDATE jadwal SET waktu_selesai = NOW(), status = 'selesai' WHERE alat_id = ? AND status = 'berjalan' ORDER BY id DESC LIMIT 1",
-              [alat.id]
+              [alatGiling.id]
             );
           }
         }

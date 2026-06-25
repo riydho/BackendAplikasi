@@ -1,4 +1,4 @@
-// routes/sensor.js
+// routes/sensor.js  — v2 (sensor field added)
 const express = require('express');
 const router  = express.Router();
 const db      = require('../config/db');

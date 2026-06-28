@@ -263,15 +263,15 @@ function publishCommand(mesin, perintah, durasiMenit = null, kecepatanPersen = n
   // mesin: 'press' | 'giling'
   // perintah: 'STOP' | 'START'
   // durasiMenit: opsional, hanya untuk START
-  // kecepatanPersen: 0-100, dikonversi ke PWM 0-255 sebelum dikirim ke ESP32
+  // kecepatanPersen: 0-100, dikirim langsung ke ESP32 (ESP32 konversi ke PWM via persenKePwm())
   const data = { mesin, perintah };
   if (perintah === 'START') {
     if (durasiMenit !== null && !isNaN(durasiMenit)) {
       data.durasi = durasiMenit;
     }
     if (kecepatanPersen !== null && !isNaN(kecepatanPersen)) {
-      // Konversi persen → PWM (0-100% → 0-255), sama dengan persenKePwm() di ESP32
-      data.kecepatan = Math.round((kecepatanPersen / 100) * 255);
+      // Kirim langsung dalam persen (0-100), ESP32 yang konversi ke PWM via persenKePwm()
+      data.kecepatan = Math.round(kecepatanPersen);
     }
   }
   const payload = JSON.stringify(data);

@@ -254,14 +254,20 @@ client.on('offline', () => {
 });
 
 // ── Helper publish command ke ESP32 ────────────────────────────────────────
-function publishCommand(mesin, perintah, durasiMenit = null) {
+function publishCommand(mesin, perintah, durasiMenit = null, kecepatanPersen = null) {
   // mesin: 'press' | 'giling'
   // perintah: 'STOP' | 'START'
   // durasiMenit: opsional, hanya untuk START
-  // Payload JSON: {"mesin":"press","perintah":"STOP"} atau {"mesin":"giling","perintah":"START","durasi":5}
+  // kecepatanPersen: 0-100, dikonversi ke PWM 0-255 sebelum dikirim ke ESP32
   const data = { mesin, perintah };
-  if (perintah === 'START' && durasiMenit !== null && !isNaN(durasiMenit)) {
-    data.durasi = durasiMenit;
+  if (perintah === 'START') {
+    if (durasiMenit !== null && !isNaN(durasiMenit)) {
+      data.durasi = durasiMenit;
+    }
+    if (kecepatanPersen !== null && !isNaN(kecepatanPersen)) {
+      // Konversi persen → PWM (0-100% → 0-255), sama dengan persenKePwm() di ESP32
+      data.kecepatan = Math.round((kecepatanPersen / 100) * 255);
+    }
   }
   const payload = JSON.stringify(data);
   client.publish('edasmart/cmd', payload, { qos: 1 }, (err) => {

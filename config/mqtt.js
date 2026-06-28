@@ -15,6 +15,7 @@ const realtimeState = {
     status: 'OFF',
     rpm:    0,
     sisa:   0,
+    kecepatan: 100, // persen, default 100%
     updatedAt: null,
   },
   estop: {
@@ -131,11 +132,15 @@ client.on('message', async (topic, message) => {
       }
 
       // ── Giling ──────────────────────────────────────────────
-      // Payload: {"status":"ON","rpm":1200,"sisa":30}
+      // Payload: {"status":"ON","rpm":1200,"sisa":30,"kecepatan":75}
       case 'edasmart/giling': {
-        realtimeState.giling.status    = val.status ?? realtimeState.giling.status;
-        realtimeState.giling.rpm       = val.rpm    ?? realtimeState.giling.rpm;
-        realtimeState.giling.sisa      = val.sisa   ?? realtimeState.giling.sisa;
+        realtimeState.giling.status    = val.status    ?? realtimeState.giling.status;
+        realtimeState.giling.rpm       = val.rpm       ?? realtimeState.giling.rpm;
+        realtimeState.giling.sisa      = val.sisa      ?? realtimeState.giling.sisa;
+        // Simpan kecepatan (persen) jika dikirim ESP32
+        if (val.kecepatan !== undefined) {
+          realtimeState.giling.kecepatan = parseInt(val.kecepatan);
+        }
         realtimeState.giling.updatedAt = new Date();
 
         const dbStatusGiling = val.status === 'ON' ? 'aktif' : 'nonaktif';

@@ -5,6 +5,47 @@ const db = require('../config/db');
 const { publishCommand } = require('../config/mqtt');
 require('dotenv').config();
 
+// GET /api/device/dashboard  ← single endpoint untuk semua data Dashboard
+// Menggabungkan: alat, jadwal-hari-ini, sensor-rpm (semua alat), sensor-hcsr
+// Mengurangi round-trip dari 5 request menjadi 1 request
+router.get('/dashboard', verifyToken, async (req, res) => {
+  try {
+    const [
+      [alatRows],
+      [monitoringRows],
+      [rpmRows],
+      [sensorRows],
+    ] = await Promise.all([
+      db.query('SELECT * FROM alat ORDER BY id ASC'),
+      db.query(`
+        SELECT m.*, a.nama_alat
+        FROM monitoring m
+        LEFT JOIN alat a ON m.alat_id = a.id
+        WHERE DATE(m.created_at) = CURDATE()
+      `),
+      db.query('SELECT * FROM sensor_rpm ORDER BY id DESC LIMIT 20'),
+      db.query('SELECT * FROM sensor_hcsr ORDER BY id DESC LIMIT 1'),
+    ]);
+
+    const rpmMap = {};
+    rpmRows.forEach(row => {
+      if (!rpmMap[row.alat_id]) rpmMap[row.alat_id] = row;
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        alat:       alatRows,
+        monitoring: monitoringRows,
+        rpmMap,
+        sensor:     sensorRows[0] || null,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET /api/device/alat
 router.get('/alat', verifyToken, async (req, res) => {
   try {
